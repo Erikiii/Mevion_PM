@@ -1,4 +1,3 @@
-Attribute VB_Name = "Module1"
 Option Explicit
 
 Public Sub SendPMAlerts()
@@ -18,6 +17,11 @@ Public Sub SendPMAlerts()
     Dim body As String
     Dim alertRows As Collection
     Dim item As Variant
+    
+    ' Variables for the exception logic
+    Dim taskID As Variant
+    Dim equipmentArea As String
+    Dim isZTEWifi As Boolean
 
     On Error GoTo ErrorHandler
 
@@ -30,8 +34,7 @@ Public Sub SendPMAlerts()
     DoEvents
 
     body = "<html><body>" & _
-           "<p>The following preventive maintenance tasks are due " & _
-           "within " & ALERT_DAYS & " days:</p>" & _
+           "<p>The following preventive maintenance tasks are due soon:</p>" & _
            "<table border='1' cellpadding='5' cellspacing='0'>" & _
            "<tr style='background:#1F4E78;color:white;'>" & _
            "<th>Task ID</th><th>Equipment / Area</th>" & _
@@ -42,25 +45,41 @@ Public Sub SendPMAlerts()
 
         dueDate = row.Range.Cells(1, _
             tbl.ListColumns("Next Due").Index).value
+            
+        taskID = row.Range.Cells(1, _
+            tbl.ListColumns("Task ID (WI)").Index).value
+            
+        equipmentArea = CStr(row.Range.Cells(1, _
+            tbl.ListColumns("Equipment / Area").Index).value)
 
         lastAlert = row.Range.Cells(1, _
             tbl.ListColumns("Last Alert Sent").Index).value
 
+        ' Check if this row matches the ZTE Wifi exception
+        isZTEWifi = (CStr(taskID) = "0" And LCase(Trim(equipmentArea)) = "zte wifi")
+
         If IsDate(dueDate) Then
             daysLeft = DateDiff("d", Date, CDate(dueDate))
 
-            'Include tasks due today through five days ahead.
-            If daysLeft >= 0 And daysLeft <= ALERT_DAYS Then
+            Dim shouldAlert As Boolean
+            shouldAlert = False
 
+            If isZTEWifi Then
+                ' Exception: Only alert if exactly 1 day left
+                If daysLeft = 1 Then shouldAlert = True
+            Else
+                ' Standard rule: Alert if due within 0 to 5 days
+                If daysLeft >= 0 And daysLeft <= ALERT_DAYS Then shouldAlert = True
+            End If
+
+            If shouldAlert Then
                 'Do not send the same task more than once today.
                 If Not IsDate(lastAlert) _
                    Or DateValue(CDate(lastAlert)) <> Date Then
 
                     body = body & "<tr>" & _
-                        "<td>" & HtmlEncode(row.Range.Cells(1, _
-                            tbl.ListColumns("Task ID (WI)").Index).Text) & "</td>" & _
-                        "<td>" & HtmlEncode(row.Range.Cells(1, _
-                            tbl.ListColumns("Equipment / Area").Index).Text) & "</td>" & _
+                        "<td>" & HtmlEncode(CStr(taskID)) & "</td>" & _
+                        "<td>" & HtmlEncode(equipmentArea) & "</td>" & _
                         "<td>" & HtmlEncode(row.Range.Cells(1, _
                             tbl.ListColumns("Maintenance Task").Index).Text) & "</td>" & _
                         "<td>" & Format(CDate(dueDate), "yyyy-mm-dd") & "</td>" & _
@@ -126,4 +145,5 @@ Private Function HtmlEncode(ByVal value As String) As String
     value = Replace(value, """", "&quot;")
     HtmlEncode = value
 End Function
+
 
